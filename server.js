@@ -1,42 +1,50 @@
-const express   = require('express');
-const http      = require('http');
+const express    = require('express');
+const http       = require('http');
 const { Server } = require('socket.io');
-const cors      = require('cors');
-const admin     = require('firebase-admin');
+const cors       = require('cors');
 
-// Inicializar Firebase Admin
-let admin;
-try {
-  admin = require('firebase-admin');
+const app      = express();
+const servidor = http.createServer(app);
+const io       = new Server(servidor, {
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+});
+
+app.use(cors());
+app.use(express.json());
+
+// ── Firebase Admin (opcional) ────────────────────────────────────────────────
+let messaging = null;
+
+(function initFirebase() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) {
-    console.log('ADVERTENCIA: FIREBASE_SERVICE_ACCOUNT no definida');
-    console.log('FCM deshabilitado — el servidor funciona sin notificaciones push');
-  } else {
-    const serviceAccount = JSON.parse(raw);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-    console.log('Firebase Admin inicializado correctamente');
+    console.log('[FCM] FIREBASE_SERVICE_ACCOUNT no definida — FCM deshabilitado');
+    return;
   }
-} catch (e) {
-  console.log('Error inicializando Firebase Admin:', e.message);
-  console.log('FCM deshabilitado — el servidor funciona sin notificaciones push');
-  admin = null;
-}
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(raw);
+  } catch {
+    console.log('[FCM] FIREBASE_SERVICE_ACCOUNT no es JSON válido — FCM deshabilitado');
+    return;
+  }
+  try {
+    const admin = require('firebase-admin');
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    messaging = admin.messaging();
+    console.log('[FCM] Firebase Admin inicializado correctamente');
+  } catch (e) {
+    console.log('[FCM] Error inicializando Firebase Admin:', e.message, '— FCM deshabilitado');
+  }
+})();
 
-// Tokens FCM de cada usuario — para enviar notificaciones push
-// fcmTokens[grupo][nombre] = token
-  socket.on('pedir_actualizacion', async () => {
-    if (!miGrupo) return;
-    io.to(miGrupo).emit('forzar_actualizacion');
-
-    // Solo enviar push si Firebase Admin está inicializado
-    if (!admin) {
-      console.log('FCM no disponible — solo notificando usuarios conectados');
-      return;
-    }
-const fcmTokens = {};
+// ── Estado en memoria ────────────────────────────────────────────────────────
+// grupos[grupo][socketId]    = { lat, lng, nombre, socketId, ultimaVez }
+// nombreIndex[grupo][nombre] = socketId
+// fcmTokens[grupo][nombre]   = token
+const grupos      = {};
+const nombreIndex = {};
+const fcmTokens   = {};
 
 function asegurarGrupo(grupo) {
   if (!grupos[grupo])      grupos[grupo]      = {};
@@ -44,6 +52,7 @@ function asegurarGrupo(grupo) {
   if (!fcmTokens[grupo])   fcmTokens[grupo]   = {};
 }
 
+// ── Socket.IO ────────────────────────────────────────────────────────────────
 io.on('connection', socket => {
   let miGrupo  = null;
   let miNombre = null;
@@ -55,13 +64,11 @@ io.on('connection', socket => {
     socket.join(miGrupo);
     asegurarGrupo(miGrupo);
 
-    // Guardar token FCM si viene en los datos
     if (datos.fcmToken) {
       fcmTokens[miGrupo][miNombre] = datos.fcmToken;
       console.log('Token FCM guardado para:', miNombre);
     }
 
-    // Eliminar conexión duplicada
     const anterior = nombreIndex[miGrupo][miNombre];
     if (anterior && anterior !== socket.id) {
       console.log('Eliminando duplicado de:', miNombre);
@@ -74,13 +81,10 @@ io.on('connection', socket => {
       }
     }
 
-    asegurarGrupo(miGrupo);
     nombreIndex[miGrupo][miNombre] = socket.id;
 
-    socket.emit('ubicaciones_iniciales',
-      Object.values(grupos[miGrupo]));
-
-    console.log(miNombre, 'se unio al grupo', miGrupo);
+    socket.emit('ubicaciones_iniciales', Object.values(grupos[miGrupo]));
+    console.log(miNombre, 'se unió al grupo', miGrupo);
   });
 
   socket.on('enviar_ubicacion', datos => {
@@ -93,45 +97,38 @@ io.on('connection', socket => {
       socketId:  socket.id,
       ultimaVez: new Date().toISOString(),
     };
-    socket.to(miGrupo).emit('ubicacion_actualizada',
-      grupos[miGrupo][socket.id]);
+    socket.to(miGrupo).emit('ubicacion_actualizada', grupos[miGrupo][socket.id]);
   });
 
-  // Botón 🔄 — pedir actualización a todos del grupo
   socket.on('pedir_actualizacion', async () => {
     if (!miGrupo) return;
 
-    // 1. Avisar a los que están conectados via Socket.IO
     io.to(miGrupo).emit('forzar_actualizacion');
 
-    // 2. Enviar notificación push a los que tienen token FCM
-    const tokens = Object.values(fcmTokens[miGrupo] || {})
-      .filter(t => t); // filtrar tokens vacíos
+    if (!messaging) {
+      console.log('[FCM] No disponible — solo notificando usuarios conectados');
+      return;
+    }
 
+    const tokens = Object.values(fcmTokens[miGrupo] || {}).filter(Boolean);
     if (tokens.length === 0) return;
 
-    console.log('Enviando push a', tokens.length, 'usuarios');
+    console.log('[FCM] Enviando push a', tokens.length, 'usuarios');
 
     for (const token of tokens) {
       try {
-        await admin.messaging().send({
-          token: token,
-          // Notificación silenciosa — solo activa el servicio
-          // no muestra alerta al usuario
+        await messaging.send({
+          token,
           data: {
             tipo:   'pedir_ubicacion',
             grupo:  miGrupo,
             origen: miNombre,
           },
-          android: {
-            priority: 'high',
-            // Sin notificación visible — solo datos
-          },
+          android: { priority: 'high' },
         });
-        console.log('Push enviado OK');
+        console.log('[FCM] Push enviado OK');
       } catch (err) {
-        console.log('Error enviando push:', err.message);
-        // Si el token es inválido, eliminarlo
+        console.log('[FCM] Error enviando push:', err.message);
         if (err.code === 'messaging/registration-token-not-registered') {
           const nombre = Object.keys(fcmTokens[miGrupo])
             .find(n => fcmTokens[miGrupo][n] === token);
@@ -145,17 +142,14 @@ io.on('connection', socket => {
     console.log('Desconectado:', socket.id, '| Razón:', razon);
     if (!miGrupo) return;
 
-    if (grupos[miGrupo]) {
-      delete grupos[miGrupo][socket.id];
-    }
+    if (grupos[miGrupo]) delete grupos[miGrupo][socket.id];
 
     if (miNombre && nombreIndex[miGrupo] &&
         nombreIndex[miGrupo][miNombre] === socket.id) {
       delete nombreIndex[miGrupo][miNombre];
     }
 
-    if (grupos[miGrupo] &&
-        Object.keys(grupos[miGrupo]).length === 0) {
+    if (grupos[miGrupo] && Object.keys(grupos[miGrupo]).length === 0) {
       delete grupos[miGrupo];
       delete nombreIndex[miGrupo];
       delete fcmTokens[miGrupo];
@@ -165,6 +159,7 @@ io.on('connection', socket => {
   });
 });
 
+// ── HTTP endpoints ───────────────────────────────────────────────────────────
 app.get('/', (req, res) =>
   res.json({
     estado: 'FindMyApp corriendo',
@@ -173,7 +168,13 @@ app.get('/', (req, res) =>
   })
 );
 
-const PORT = process.env.PORT || 3000;
-servidor.listen(PORT, () =>
-  console.log('Servidor en puerto', PORT)
+app.get('/status', (req, res) =>
+  res.json({
+    fcm:    messaging !== null,
+    grupos: Object.keys(grupos).length,
+    hora:   new Date().toISOString(),
+  })
 );
+
+const PORT = process.env.PORT || 3000;
+servidor.listen(PORT, () => console.log('Servidor en puerto', PORT));
