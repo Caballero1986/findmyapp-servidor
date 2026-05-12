@@ -4,28 +4,38 @@ const { Server } = require('socket.io');
 const cors      = require('cors');
 const admin     = require('firebase-admin');
 
-// Inicializar Firebase Admin para enviar notificaciones push
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-
-const app      = express();
-const servidor = http.createServer(app);
-const io       = new Server(servidor, {
-  cors: { origin: '*' },
-  pingTimeout:  20000,
-  pingInterval: 10000,
-});
-
-app.use(cors());
-app.use(express.json());
-
-const grupos      = {};
-const nombreIndex = {};
+// Inicializar Firebase Admin
+let admin;
+try {
+  admin = require('firebase-admin');
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!raw) {
+    console.log('ADVERTENCIA: FIREBASE_SERVICE_ACCOUNT no definida');
+    console.log('FCM deshabilitado — el servidor funciona sin notificaciones push');
+  } else {
+    const serviceAccount = JSON.parse(raw);
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+    console.log('Firebase Admin inicializado correctamente');
+  }
+} catch (e) {
+  console.log('Error inicializando Firebase Admin:', e.message);
+  console.log('FCM deshabilitado — el servidor funciona sin notificaciones push');
+  admin = null;
+}
 
 // Tokens FCM de cada usuario — para enviar notificaciones push
 // fcmTokens[grupo][nombre] = token
+  socket.on('pedir_actualizacion', async () => {
+    if (!miGrupo) return;
+    io.to(miGrupo).emit('forzar_actualizacion');
+
+    // Solo enviar push si Firebase Admin está inicializado
+    if (!admin) {
+      console.log('FCM no disponible — solo notificando usuarios conectados');
+      return;
+    }
 const fcmTokens = {};
 
 function asegurarGrupo(grupo) {
