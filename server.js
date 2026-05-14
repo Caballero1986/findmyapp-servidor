@@ -1,3 +1,4 @@
+// v1.1 — FCM con variables individuales
 const express    = require('express');
 const http       = require('http');
 const { Server } = require('socket.io');
