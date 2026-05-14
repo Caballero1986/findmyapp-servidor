@@ -33,9 +33,12 @@ let messaging = null;
   }
 
   // 2. Variables individuales — para Railway
+  const varsFirebase = Object.keys(process.env).filter(k => k.startsWith('FIREBASE'));
+  console.log('[FCM] Variables FIREBASE detectadas:', varsFirebase);
   console.log('[FCM] PROJECT_ID existe:', !!process.env.FIREBASE_PROJECT_ID);
   console.log('[FCM] CLIENT_EMAIL existe:', !!process.env.FIREBASE_CLIENT_EMAIL);
   console.log('[FCM] PRIVATE_KEY existe:', !!process.env.FIREBASE_PRIVATE_KEY);
+  console.log('[FCM] SERVICE_ACCOUNT existe:', !!process.env.FIREBASE_SERVICE_ACCOUNT);
   console.log('[FCM] PRIVATE_KEY primeros 50 chars:', process.env.FIREBASE_PRIVATE_KEY?.substring(0, 50));
 
   if (!serviceAccount && process.env.FIREBASE_PROJECT_ID) {
@@ -209,13 +212,15 @@ app.get('/', (req, res) =>
 
 app.get('/status', (req, res) =>
   res.json({
-    fcm:             messaging !== null,
-    grupos:          Object.keys(grupos).length,
-    hora:            new Date().toISOString(),
-    env_project_id:  !!process.env.FIREBASE_PROJECT_ID,
-    env_client_email:!!process.env.FIREBASE_CLIENT_EMAIL,
-    env_private_key: !!process.env.FIREBASE_PRIVATE_KEY,
-    private_key_inicio: process.env.FIREBASE_PRIVATE_KEY?.substring(0, 30) || 'no definida',
+    fcm:              messaging !== null,
+    grupos:           Object.keys(grupos).length,
+    hora:             new Date().toISOString(),
+    vars_firebase:    Object.keys(process.env).filter(k => k.startsWith('FIREBASE')),
+    env_project_id:   !!process.env.FIREBASE_PROJECT_ID,
+    env_client_email: !!process.env.FIREBASE_CLIENT_EMAIL,
+    env_private_key:  !!process.env.FIREBASE_PRIVATE_KEY,
+    env_service_account: !!process.env.FIREBASE_SERVICE_ACCOUNT,
+    private_key_inicio:  process.env.FIREBASE_PRIVATE_KEY?.substring(0, 30) || 'no definida',
   })
 );
 
