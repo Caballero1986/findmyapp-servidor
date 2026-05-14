@@ -208,9 +208,13 @@ app.get('/', (req, res) =>
 
 app.get('/status', (req, res) =>
   res.json({
-    fcm:    messaging !== null,
-    grupos: Object.keys(grupos).length,
-    hora:   new Date().toISOString(),
+    fcm:             messaging !== null,
+    grupos:          Object.keys(grupos).length,
+    hora:            new Date().toISOString(),
+    env_project_id:  !!process.env.FIREBASE_PROJECT_ID,
+    env_client_email:!!process.env.FIREBASE_CLIENT_EMAIL,
+    env_private_key: !!process.env.FIREBASE_PRIVATE_KEY,
+    private_key_inicio: process.env.FIREBASE_PRIVATE_KEY?.substring(0, 30) || 'no definida',
   })
 );
 
