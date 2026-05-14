@@ -1,3 +1,10 @@
+console.log('=== VARIABLES DE ENTORNO ===');
+console.log('PORT:', process.env.PORT);
+console.log('FIREBASE_PROJECT_ID:', process.env.FIREBASE_PROJECT_ID);
+console.log('FIREBASE_CLIENT_EMAIL:', process.env.FIREBASE_CLIENT_EMAIL);
+console.log('FIREBASE_PRIVATE_KEY existe:', !!process.env.FIREBASE_PRIVATE_KEY);
+console.log('============================');
+
 // v1.1 — FCM con variables individuales
 const express    = require('express');
 const http       = require('http');
@@ -224,5 +231,5 @@ app.get('/status', (req, res) =>
   })
 );
 
-const PORT = process.env.PORT || 3000;
-servidor.listen(PORT, () => console.log('Servidor en puerto', PORT));
+const PORT = process.env.PORT;
+servidor.listen(PORT, '0.0.0.0', () => console.log('Puerto:', PORT));
