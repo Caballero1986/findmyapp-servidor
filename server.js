@@ -16,25 +16,54 @@ app.use(express.json());
 let messaging = null;
 
 (function initFirebase() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) {
-    console.log('[FCM] FIREBASE_SERVICE_ACCOUNT no definida — FCM deshabilitado');
-    return;
-  }
-  let serviceAccount;
+  const fs   = require('fs');
+  const path = require('path');
+  let serviceAccount = null;
+
+  // 1. Archivo local — para desarrollo
   try {
-    serviceAccount = JSON.parse(raw);
-  } catch {
-    console.log('[FCM] FIREBASE_SERVICE_ACCOUNT no es JSON válido — FCM deshabilitado');
+    const file = path.join(__dirname, 'serviceAccount.json');
+    if (fs.existsSync(file)) {
+      serviceAccount = JSON.parse(fs.readFileSync(file, 'utf8'));
+      console.log('[FCM] Usando serviceAccount.json local');
+    }
+  } catch (e) {
+    console.log('[FCM] Error leyendo serviceAccount.json:', e.message);
+  }
+
+  // 2. Variables individuales — para Railway
+  if (!serviceAccount && process.env.FIREBASE_PROJECT_ID) {
+    serviceAccount = {
+      type:         'service_account',
+      project_id:   process.env.FIREBASE_PROJECT_ID,
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      private_key:  (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    };
+    console.log('[FCM] Usando variables de entorno individuales');
+  }
+
+  // 3. JSON completo en una sola variable — fallback
+  if (!serviceAccount && process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      console.log('[FCM] Usando FIREBASE_SERVICE_ACCOUNT JSON');
+    } catch {
+      console.log('[FCM] FIREBASE_SERVICE_ACCOUNT no es JSON válido');
+    }
+  }
+
+  if (!serviceAccount) {
+    console.log('[FCM] Sin credenciales Firebase — FCM deshabilitado');
     return;
   }
+
   try {
     const admin = require('firebase-admin');
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     messaging = admin.messaging();
     console.log('[FCM] Firebase Admin inicializado correctamente');
   } catch (e) {
-    console.log('[FCM] Error inicializando Firebase Admin:', e.message, '— FCM deshabilitado');
+    console.log('[FCM] Error inicializando Firebase Admin:', e.message);
   }
 })();
 
