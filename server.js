@@ -1,11 +1,3 @@
-console.log('=== VARIABLES DE ENTORNO ===');
-console.log('PORT:', process.env.PORT);
-console.log('FIREBASE_PROJECT_ID:', process.env.FIREBASE_PROJECT_ID);
-console.log('FIREBASE_CLIENT_EMAIL:', process.env.FIREBASE_CLIENT_EMAIL);
-console.log('FIREBASE_PRIVATE_KEY existe:', !!process.env.FIREBASE_PRIVATE_KEY);
-console.log('============================');
-
-// v1.1 — FCM con variables individuales
 const express    = require('express');
 const http       = require('http');
 const { Server } = require('socket.io');
@@ -20,16 +12,36 @@ const io       = new Server(servidor, {
 app.use(cors());
 app.use(express.json());
 
-// ── Firebase Admin (opcional) ────────────────────────────────────────────────
+// ── Estado en memoria ────────────────────────────────────────────────────────
+const grupos      = {};
+const nombreIndex = {};
+const fcmTokens   = {};
+
+function asegurarGrupo(grupo) {
+  if (!grupos[grupo])      grupos[grupo]      = {};
+  if (!nombreIndex[grupo]) nombreIndex[grupo] = {};
+  if (!fcmTokens[grupo])   fcmTokens[grupo]   = {};
+}
+
+// ── Firebase Admin ───────────────────────────────────────────────────────────
 let messaging = null;
 
-(function initFirebase() {
-  const fs   = require('fs');
-  const path = require('path');
+function inicializarFirebase() {
+  const projectId   = process.env['FIREBASE_PROJECT_ID'];
+  const clientEmail = process.env['FIREBASE_CLIENT_EMAIL'];
+  const privateKey  = process.env['FIREBASE_PRIVATE_KEY'];
+
+  console.log('[FCM] projectId:', projectId);
+  console.log('[FCM] clientEmail:', clientEmail);
+  console.log('[FCM] privateKey existe:', !!privateKey);
+  console.log('[FCM] Todas las vars Firebase:', Object.keys(process.env).filter(k => k.startsWith('FIREBASE')));
+
   let serviceAccount = null;
 
-  // 1. Archivo local — para desarrollo
+  // 1. Archivo local — desarrollo
   try {
+    const fs   = require('fs');
+    const path = require('path');
     const file = path.join(__dirname, 'serviceAccount.json');
     if (fs.existsSync(file)) {
       serviceAccount = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -39,33 +51,21 @@ let messaging = null;
     console.log('[FCM] Error leyendo serviceAccount.json:', e.message);
   }
 
-  // 2. Variables individuales — para Railway
-  const varsFirebase = Object.keys(process.env).filter(k => k.startsWith('FIREBASE'));
-  console.log('[FCM] Variables FIREBASE detectadas:', varsFirebase);
-  console.log('[FCM] PROJECT_ID existe:', !!process.env.FIREBASE_PROJECT_ID);
-  console.log('[FCM] CLIENT_EMAIL existe:', !!process.env.FIREBASE_CLIENT_EMAIL);
-  console.log('[FCM] PRIVATE_KEY existe:', !!process.env.FIREBASE_PRIVATE_KEY);
-  console.log('[FCM] SERVICE_ACCOUNT existe:', !!process.env.FIREBASE_SERVICE_ACCOUNT);
-  console.log('[FCM] PRIVATE_KEY primeros 50 chars:', process.env.FIREBASE_PRIVATE_KEY?.substring(0, 50));
-
-  if (!serviceAccount && process.env.FIREBASE_PROJECT_ID) {
-    const privateKey = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  // 2. Variables individuales — Railway
+  if (!serviceAccount && projectId) {
     serviceAccount = {
       type:         'service_account',
-      project_id:   process.env.FIREBASE_PROJECT_ID,
-      client_email: process.env.FIREBASE_CLIENT_EMAIL,
-      private_key:  privateKey,
+      project_id:   projectId,
+      client_email: clientEmail,
+      private_key:  (privateKey || '').replace(/\\n/g, '\n'),
     };
-    console.log('[FCM] Usando variables de entorno individuales');
-    console.log('[FCM] project_id:', serviceAccount.project_id);
-    console.log('[FCM] client_email:', serviceAccount.client_email);
-    console.log('[FCM] private_key empieza con BEGIN:', privateKey.includes('BEGIN PRIVATE KEY'));
+    console.log('[FCM] Usando variables individuales');
   }
 
-  // 3. JSON completo en una sola variable — fallback
-  if (!serviceAccount && process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // 3. JSON completo — fallback
+  if (!serviceAccount && process.env['FIREBASE_SERVICE_ACCOUNT']) {
     try {
-      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      serviceAccount = JSON.parse(process.env['FIREBASE_SERVICE_ACCOUNT']);
       console.log('[FCM] Usando FIREBASE_SERVICE_ACCOUNT JSON');
     } catch {
       console.log('[FCM] FIREBASE_SERVICE_ACCOUNT no es JSON válido');
@@ -73,7 +73,7 @@ let messaging = null;
   }
 
   if (!serviceAccount) {
-    console.log('[FCM] Sin credenciales Firebase — FCM deshabilitado');
+    console.log('[FCM] Sin credenciales — FCM deshabilitado');
     return;
   }
 
@@ -85,20 +85,6 @@ let messaging = null;
   } catch (e) {
     console.log('[FCM] Error inicializando Firebase Admin:', e.message);
   }
-})();
-
-// ── Estado en memoria ────────────────────────────────────────────────────────
-// grupos[grupo][socketId]    = { lat, lng, nombre, socketId, ultimaVez }
-// nombreIndex[grupo][nombre] = socketId
-// fcmTokens[grupo][nombre]   = token
-const grupos      = {};
-const nombreIndex = {};
-const fcmTokens   = {};
-
-function asegurarGrupo(grupo) {
-  if (!grupos[grupo])      grupos[grupo]      = {};
-  if (!nombreIndex[grupo]) nombreIndex[grupo] = {};
-  if (!fcmTokens[grupo])   fcmTokens[grupo]   = {};
 }
 
 // ── Socket.IO ────────────────────────────────────────────────────────────────
@@ -131,7 +117,6 @@ io.on('connection', socket => {
     }
 
     nombreIndex[miGrupo][miNombre] = socket.id;
-
     socket.emit('ubicaciones_iniciales', Object.values(grupos[miGrupo]));
     console.log(miNombre, 'se unió al grupo', miGrupo);
   });
@@ -168,11 +153,7 @@ io.on('connection', socket => {
       try {
         await messaging.send({
           token,
-          data: {
-            tipo:   'pedir_ubicacion',
-            grupo:  miGrupo,
-            origen: miNombre,
-          },
+          data: { tipo: 'pedir_ubicacion', grupo: miGrupo, origen: miNombre },
           android: { priority: 'high' },
         });
         console.log('[FCM] Push enviado OK');
@@ -209,29 +190,29 @@ io.on('connection', socket => {
 });
 
 // ── HTTP endpoints ───────────────────────────────────────────────────────────
-app.get('/', (req, res) =>
+app.get('/', (_req, res) => res.json({ estado: 'ok' }));
+
+app.get('/status', (_req, res) =>
   res.json({
-    estado: 'FindMyApp corriendo',
-    grupos: Object.keys(grupos).length,
-    hora:   new Date().toISOString(),
+    fcm:            messaging !== null,
+    grupos:         Object.keys(grupos).length,
+    hora:           new Date().toISOString(),
+    vars_firebase:  Object.keys(process.env).filter(k => k.startsWith('FIREBASE')),
+    env_project_id: !!process.env['FIREBASE_PROJECT_ID'],
+    env_client_email: !!process.env['FIREBASE_CLIENT_EMAIL'],
+    env_private_key:  !!process.env['FIREBASE_PRIVATE_KEY'],
   })
 );
 
-app.get('/status', (req, res) =>
-  res.json({
-    fcm:              messaging !== null,
-    grupos:           Object.keys(grupos).length,
-    hora:             new Date().toISOString(),
-    vars_firebase:    Object.keys(process.env).filter(k => k.startsWith('FIREBASE')),
-    env_project_id:   !!process.env.FIREBASE_PROJECT_ID,
-    env_client_email: !!process.env.FIREBASE_CLIENT_EMAIL,
-    env_private_key:  !!process.env.FIREBASE_PRIVATE_KEY,
-    env_service_account: !!process.env.FIREBASE_SERVICE_ACCOUNT,
-    private_key_inicio:  process.env.FIREBASE_PRIVATE_KEY?.substring(0, 30) || 'no definida',
-  })
-);
-
+// ── Arranque ─────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
+
 servidor.listen(PORT, '0.0.0.0', () => {
   console.log('Servidor escuchando en puerto ' + PORT);
+  inicializarFirebase();
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM recibido — cerrando limpiamente');
+  servidor.close(() => process.exit(0));
 });
