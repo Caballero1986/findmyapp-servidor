@@ -32,14 +32,23 @@ let messaging = null;
   }
 
   // 2. Variables individuales — para Railway
+  console.log('[FCM] PROJECT_ID existe:', !!process.env.FIREBASE_PROJECT_ID);
+  console.log('[FCM] CLIENT_EMAIL existe:', !!process.env.FIREBASE_CLIENT_EMAIL);
+  console.log('[FCM] PRIVATE_KEY existe:', !!process.env.FIREBASE_PRIVATE_KEY);
+  console.log('[FCM] PRIVATE_KEY primeros 50 chars:', process.env.FIREBASE_PRIVATE_KEY?.substring(0, 50));
+
   if (!serviceAccount && process.env.FIREBASE_PROJECT_ID) {
+    const privateKey = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
     serviceAccount = {
       type:         'service_account',
       project_id:   process.env.FIREBASE_PROJECT_ID,
       client_email: process.env.FIREBASE_CLIENT_EMAIL,
-      private_key:  (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+      private_key:  privateKey,
     };
     console.log('[FCM] Usando variables de entorno individuales');
+    console.log('[FCM] project_id:', serviceAccount.project_id);
+    console.log('[FCM] client_email:', serviceAccount.client_email);
+    console.log('[FCM] private_key empieza con BEGIN:', privateKey.includes('BEGIN PRIVATE KEY'));
   }
 
   // 3. JSON completo en una sola variable — fallback
