@@ -24,66 +24,47 @@ function asegurarGrupo(grupo) {
 }
 
 // ── Firebase Admin ───────────────────────────────────────────────────────────
-let messaging = null;
+let adminApp = null;
 
 function inicializarFirebase() {
-  const projectId   = process.env['FIREBASE_PROJECT_ID'];
-  const clientEmail = process.env['FIREBASE_CLIENT_EMAIL'];
-  const privateKey  = process.env['FIREBASE_PRIVATE_KEY'];
-
-  console.log('[FCM] projectId:', projectId);
-  console.log('[FCM] clientEmail:', clientEmail);
-  console.log('[FCM] privateKey existe:', !!privateKey);
-  console.log('[FCM] Todas las vars Firebase:', Object.keys(process.env).filter(k => k.startsWith('FIREBASE')));
-
-  let serviceAccount = null;
-
-  // 1. Archivo local — desarrollo
   try {
-    const fs   = require('fs');
-    const path = require('path');
-    const file = path.join(__dirname, 'serviceAccount.json');
-    if (fs.existsSync(file)) {
-      serviceAccount = JSON.parse(fs.readFileSync(file, 'utf8'));
-      console.log('[FCM] Usando serviceAccount.json local');
-    }
-  } catch (e) {
-    console.log('[FCM] Error leyendo serviceAccount.json:', e.message);
-  }
+    let projectId, clientEmail, privateKey;
 
-  // 2. Variables individuales — Railway
-  if (!serviceAccount && projectId) {
-    serviceAccount = {
-      type:         'service_account',
-      project_id:   projectId,
-      client_email: clientEmail,
-      private_key:  (privateKey || '').replace(/\\n/g, '\n'),
-    };
-    console.log('[FCM] Usando variables individuales');
-  }
-
-  // 3. JSON completo — fallback
-  if (!serviceAccount && process.env['FIREBASE_SERVICE_ACCOUNT']) {
+    // 1. Archivo local (desarrollo / Railway con archivo subido)
     try {
-      serviceAccount = JSON.parse(process.env['FIREBASE_SERVICE_ACCOUNT']);
-      console.log('[FCM] Usando FIREBASE_SERVICE_ACCOUNT JSON');
-    } catch {
-      console.log('[FCM] FIREBASE_SERVICE_ACCOUNT no es JSON válido');
+      const cfg = require('./firebaseConfig.js');
+      projectId   = cfg.projectId;
+      clientEmail = cfg.clientEmail;
+      privateKey  = cfg.privateKey;
+      console.log('[FCM] Usando firebaseConfig.js');
+    } catch (e) {
+      // 2. Variables de entorno (Railway env vars)
+      projectId   = process.env.FIREBASE_PROJECT_ID;
+      clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      privateKey  = process.env.FIREBASE_PRIVATE_KEY;
+      console.log('[FCM] Usando variables de entorno');
+      console.log('[FCM] projectId:', projectId);
+      console.log('[FCM] clientEmail:', clientEmail);
+      console.log('[FCM] privateKey existe:', !!privateKey);
     }
-  }
 
-  if (!serviceAccount) {
-    console.log('[FCM] Sin credenciales — FCM deshabilitado');
-    return;
-  }
+    if (!projectId || !clientEmail || !privateKey) {
+      console.log('[FCM] Sin credenciales — FCM deshabilitado');
+      return;
+    }
 
-  try {
     const admin = require('firebase-admin');
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-    messaging = admin.messaging();
-    console.log('[FCM] Firebase Admin inicializado correctamente');
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey: privateKey.replace(/\\n/g, '\n'),
+      }),
+    });
+    adminApp = admin;
+    console.log('[FCM] Firebase Admin inicializado OK');
   } catch (e) {
-    console.log('[FCM] Error inicializando Firebase Admin:', e.message);
+    console.log('[FCM] Error:', e.message);
   }
 }
 
@@ -139,7 +120,7 @@ io.on('connection', socket => {
 
     io.to(miGrupo).emit('forzar_actualizacion');
 
-    if (!messaging) {
+    if (!adminApp) {
       console.log('[FCM] No disponible — solo notificando usuarios conectados');
       return;
     }
@@ -151,7 +132,7 @@ io.on('connection', socket => {
 
     for (const token of tokens) {
       try {
-        await messaging.send({
+        await adminApp.messaging().send({
           token,
           data: { tipo: 'pedir_ubicacion', grupo: miGrupo, origen: miNombre },
           android: { priority: 'high' },
@@ -194,13 +175,13 @@ app.get('/', (_req, res) => res.json({ estado: 'ok' }));
 
 app.get('/status', (_req, res) =>
   res.json({
-    fcm:            messaging !== null,
-    grupos:         Object.keys(grupos).length,
-    hora:           new Date().toISOString(),
-    vars_firebase:  Object.keys(process.env).filter(k => k.startsWith('FIREBASE')),
-    env_project_id: !!process.env['FIREBASE_PROJECT_ID'],
-    env_client_email: !!process.env['FIREBASE_CLIENT_EMAIL'],
-    env_private_key:  !!process.env['FIREBASE_PRIVATE_KEY'],
+    fcm:              adminApp !== null,
+    grupos:           Object.keys(grupos).length,
+    hora:             new Date().toISOString(),
+    vars_firebase:    Object.keys(process.env).filter(k => k.startsWith('FIREBASE')),
+    env_project_id:   !!process.env.FIREBASE_PROJECT_ID,
+    env_client_email: !!process.env.FIREBASE_CLIENT_EMAIL,
+    env_private_key:  !!process.env.FIREBASE_PRIVATE_KEY,
   })
 );
 
