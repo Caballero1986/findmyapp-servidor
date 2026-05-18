@@ -28,43 +28,19 @@ let adminApp = null;
 
 function inicializarFirebase() {
   try {
-    let projectId, clientEmail, privateKey;
-
-    // 1. Archivo local (desarrollo / Railway con archivo subido)
-    try {
-      const cfg = require('./firebaseConfig.js');
-      projectId   = cfg.projectId;
-      clientEmail = cfg.clientEmail;
-      privateKey  = cfg.privateKey;
-      console.log('[FCM] Usando firebaseConfig.js');
-    } catch (e) {
-      // 2. Variables de entorno (Railway env vars)
-      projectId   = process.env.FIREBASE_PROJECT_ID;
-      clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-      privateKey  = process.env.FIREBASE_PRIVATE_KEY;
-      console.log('[FCM] Usando variables de entorno');
-      console.log('[FCM] projectId:', projectId);
-      console.log('[FCM] clientEmail:', clientEmail);
-      console.log('[FCM] privateKey existe:', !!privateKey);
-    }
-
-    if (!projectId || !clientEmail || !privateKey) {
-      console.log('[FCM] Sin credenciales — FCM deshabilitado');
-      return;
-    }
-
     const admin = require('firebase-admin');
     admin.initializeApp({
       credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey: privateKey.replace(/\\n/g, '\n'),
+        projectId:   'findmyapp-5dd91',
+        clientEmail: 'firebase-adminsdk-fbsvc@findmyapp-5dd91.iam.gserviceaccount.com',
+        privateKey:  '-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC9xNezFPr0Mdo6\nwJPGoCr98ktLTwtQqROUqik2Qn+cBV8M087qtAQzMFCNU0B1FlYSjnbKdR4BK6nU\nGphLq+cMbbnesKanCIupgz3h6TMAJkUQeS743WEFN1B0hMZ+fNMcMEjJs/3YnKud\nIpwBZrL7vv9s4yKBs4n2vBVpzoSA2iDfU0g+ZRK6e91Q/EDHsTgbOYTudwiVufxx\nAESNXqYo2i7X6CrAKK5Egy9Sh39O6uuLi05Q+lPhJkrEvuxgF/6tiDhW0EYXO1XK\neQ0UomLGSps5x8HzU78IxxUXS7devz6y9rHtOlkSmGfioFabpRjmnlVtuR3ymuLK\nZS4eyyaLAgMBAAECggEABl6N/X/DGzZ1JFWvCr1OKW8xdxn0akT9LZc3LOVh0m3H\nuUQpWhf9WsPQtahJWI9jB4UVQvRYCSKwX43I9iPolwfec4qq/UjnJHhi4lXpFU8z\nhZBbsun98KaLom2LxVZmi41UqW3LeQgWe9QGjRwnqRV0Y0Y4XpwVEbKnEVcSJspH\nSCk25I/lDvt8PTcXi4eGqQUBfoRUvo5mjQflaatW+lXcKP/pe7tL5XMnx9CwP6T+\nig5F3ZbokLtU917CFbaMJK7CLMRpkBzp02/bWYF0aiNIt5wNOoI6v7xmo7ubA2Du\nDUWsRj5GvG8OEVPk6haK1xLDcIhchk76d+0yqIdnoQKBgQDwZkWkYVYloGZqLCOv\ns15hSQWQwg8hszUe3Fn5XwuyYTOUQrRG3hZXDBwwKsdMaR4nOKhd8rMdjsMQ5QiF\ndVniD38Qua7IjU1wX7SGB36rawVl6I0SPbMdRF2B8EHv9Q1t7lQkugztCK6yKcfT\nDg44BCMFghU+5d2XdmEk80qTGwKBgQDKFXNjzV8eRJPGeA8PoUDHKZr4EdBN5Te7\nKMA73oPpiY+UjB3WgH3/dabTDNnVhWhswqxTlHXm4BMJJRGraSL+BWTNW2xmyIaY\ncsHgKD2F+w7gBa+XPjStfKpREjdaNdV+lFR5RQk619rBMwMA78MSqbvYF0R4hHnb\nnPyiv1aBUQKBgQDRehzHPzYE9X8olyvFh4P/O9UIrcDnubPZH2Obg7G6jy6Vy4Yx\nloZa9ad+ZVhjAdoPjTRRIRHo+KSLjTfeq0JWVPCBD3v5L//BovO4MsGy9z+t7HU4\n5uCz6QWeG1ApmxxHpXxWwHRQ+9bWUsfX5hCHyTsHKrH+q+hqefHuc72Q7wKBgQCd\ncNbkk5WerEkBYHpDcBtaz3RX/vDuLz4bR6V1P2hAY5cEYaHBg3wmsg/V7/Yq33Q6\n//RobYrp4/uQrVu10wSbKbKeN7Md5O7QCOA5dsBwCOhO6r8hsyoxW6YJ4YpUcwqx\nQnkJvhpxyMg6qzaU3Td669hYg9ApoPSbgBRn63BG8QKBgQDoEw17eoIz0FG6YQte\nz2sEUGy/tfGVM0gnGvcAJBfiYyuyRL3Nv6SGFpO8DjnQCYcRiJjeLgx07hVo0XGx\nurDSJcJ+mXUPWOXyNQgxsdIAoW6PPAKe/KoObP1msEhyJ76bSPANpfvx82pH3cbE\nscXy0rbb7CWADKMQz9U2/Uan7g==\n-----END PRIVATE KEY-----\n'.replace(/\\n/g, '\n'),
       }),
     });
     adminApp = admin;
     console.log('[FCM] Firebase Admin inicializado OK');
   } catch (e) {
     console.log('[FCM] Error:', e.message);
+    adminApp = null;
   }
 }
 
